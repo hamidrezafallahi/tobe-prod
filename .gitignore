@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+*.pem
+!nginx_configs/ssl-dhparams.pem
+*.log
+.DS_Store
