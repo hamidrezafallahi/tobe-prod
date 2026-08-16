@@ -1,7 +1,7 @@
 # =============================================================================
-# Production Environment — Language Institute (ops only)
-# Images come from Docker Hub SHA tags built by LanguageInstitute-Compose CI.
+# Production — Language Institute (ops only)
 # VPS path: /opt/institute
+# Images: Docker Hub SHA tags from LanguageInstitute-Compose / tobe-dev CI
 # =============================================================================
 
 services:
@@ -11,7 +11,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-LanguageInstituteDb}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - institute-postgres-data-prod:/var/lib/postgresql/data
     networks:
@@ -28,6 +28,41 @@ services:
         limits:
           memory: 1G
 
+  coturn:
+    image: coturn/coturn:4.6
+    container_name: institute-coturn-prod
+    restart: unless-stopped
+    environment:
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:?Set TURN_EXTERNAL_IP to VPS public IPv4}
+      TURN_USERNAME: ${TURN_USERNAME:?Set TURN_USERNAME}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:?Set TURN_CREDENTIAL}
+      TURN_REALM: ${TURN_REALM:-institute.local}
+    command:
+      - "--log-file=stdout"
+      - "--listening-port=3478"
+      - "--fingerprint"
+      - "--lt-cred-mech"
+      - "--user=${TURN_USERNAME}:${TURN_CREDENTIAL}"
+      - "--realm=${TURN_REALM:-institute.local}"
+      - "--no-tls"
+      - "--no-dtls"
+      - "--no-cli"
+      - "--min-port=49160"
+      - "--max-port=49200"
+      - "--listening-ip=0.0.0.0"
+      - "--external-ip=${TURN_EXTERNAL_IP}"
+      - "--verbose"
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "49160-49200:49160-49200/udp"
+    networks:
+      - institute-network-prod
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   backend:
     image: ${DOCKER_USERNAME}/institute-backend:${BACKEND_IMAGE_TAG}
     container_name: institute-backend-prod
@@ -36,17 +71,36 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-LanguageInstituteDb};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-LanguageInstituteDb};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}
       Jwt__Key: ${JWT_KEY}
-      Jwt__Issuer: LanguageInstitute
-      Jwt__Audience: LanguageInstituteUsers
+      Jwt__Issuer: ${Jwt__Issuer:-LanguageInstitute}
+      Jwt__Audience: ${Jwt__Audience:-LanguageInstituteUsers}
       Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-ChangeMe!123}
       Swagger__Enabled: ${Swagger__Enabled:-false}
+      WebRtc__Turn__Urls: ${WebRtc__Turn__Urls}
+      WebRtc__Turn__Username: ${WebRtc__Turn__Username}
+      WebRtc__Turn__Credential: ${WebRtc__Turn__Credential}
+      Smtp__Enabled: ${Smtp__Enabled:-false}
+      Smtp__Host: ${Smtp__Host:-}
+      Smtp__Port: ${Smtp__Port:-587}
+      Smtp__UseSsl: ${Smtp__UseSsl:-true}
+      Smtp__FromAddress: ${Smtp__FromAddress}
+      Smtp__FromName: ${Smtp__FromName:-Language Institute}
+      Smtp__SiteUrl: ${Smtp__SiteUrl}
+      Smtp__Username: ${Smtp__Username:-}
+      Smtp__Password: ${Smtp__Password:-}
+      Billing__ActivateOnPay: ${Billing__ActivateOnPay:-false}
+      Billing__OnlineGatewayEnabled: ${Billing__OnlineGatewayEnabled:-false}
+      Certificates__MinAttendancePercent: ${Certificates__MinAttendancePercent:-80}
+      Certificates__MinFinalPercent: ${Certificates__MinFinalPercent:-70}
+      RateLimiting__Enabled: ${RateLimiting__Enabled:-true}
     volumes:
       - uploads_prod:/app/wwwroot/uploads
     depends_on:
       postgres:
         condition: service_healthy
+      coturn:
+        condition: service_started
     networks:
       - institute-network-prod
     restart: unless-stopped
@@ -55,7 +109,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -108,34 +162,40 @@ services:
         condition: service_healthy
       frontend:
         condition: service_started
-      certbot_init:
+      tls_bootstrap:
         condition: service_completed_successfully
     networks:
       - institute-network-prod
     restart: unless-stopped
 
-  certbot_init:
-    image: certbot/certbot
-    container_name: institute-certbot-init
+  # Ensures nginx can start even before Let's Encrypt: self-signed placeholder.
+  # Real certs: ./scripts/issue-cert.sh after DNS points here.
+  tls_bootstrap:
+    image: alpine:3.20
+    container_name: institute-tls-bootstrap
     volumes:
       - letsencrypt:/etc/letsencrypt
-      - certbot-webroot:/var/www/certbot
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME}
     entrypoint: /bin/sh
     command:
       - -c
       - |
-        if [ -d "/etc/letsencrypt/live/$${DOMAIN_NAME}" ]; then
-          echo "Certificate already exists"
+        set -e
+        LIVE="/etc/letsencrypt/live/$${DOMAIN_NAME}"
+        if [ -f "$$LIVE/fullchain.pem" ] && [ -f "$$LIVE/privkey.pem" ]; then
+          echo "TLS material already present for $${DOMAIN_NAME}"
           exit 0
         fi
-        certbot certonly --standalone \
-          --preferred-challenges http \
-          --email "$${CERTBOT_EMAIL}" \
-          --agree-tos --no-eff-email \
-          -d "$${DOMAIN_NAME}" -d "www.$${DOMAIN_NAME}" || true
-    environment:
-      DOMAIN_NAME: ${DOMAIN_NAME}
-      CERTBOT_EMAIL: ${CERTBOT_EMAIL}
+        echo "Creating self-signed placeholder for $${DOMAIN_NAME} (replace with Let's Encrypt via scripts/issue-cert.sh)"
+        apk add --no-cache openssl >/dev/null
+        mkdir -p "$$LIVE"
+        openssl req -x509 -nodes -newkey rsa:2048 -days 7 \
+          -keyout "$$LIVE/privkey.pem" \
+          -out "$$LIVE/fullchain.pem" \
+          -subj "/CN=$${DOMAIN_NAME}"
+        chmod 600 "$$LIVE/privkey.pem"
+        echo "Self-signed ready"
     networks:
       - institute-network-prod
     restart: "no"
@@ -156,6 +216,9 @@ services:
         done
     environment:
       RENEW_INTERVAL: ${RENEW_INTERVAL:-43200}
+    depends_on:
+      nginx:
+        condition: service_started
     networks:
       - institute-network-prod
     restart: unless-stopped

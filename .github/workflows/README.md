@@ -1,2 +1,2 @@
-# Legacy / inactive — CI lives in LanguageInstitute-Compose
-# Keep this file empty of active jobs so prod repo never builds app images.
+# Inactive — image build + deploy SSH live in tobe-dev (.github/workflows).
+# This ops repo must not build application images.

@@ -29,6 +29,16 @@ echo "Deploy started at: $(date)"
 echo "Args: $*"
 echo "=================================================="
 
+if [[ ! -f .env ]]; then
+  echo "ERROR: /opt/institute/.env missing. cp .env.example .env and fill secrets."
+  exit 1
+fi
+
+# Normalize scripts if cloned from Windows
+sed -i 's/\r$//' deploy.sh 2>/dev/null || true
+find scripts -name '*.sh' -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
+chmod +x deploy.sh scripts/*.sh 2>/dev/null || true
+
 read_sha() {
   local service="$1"
   local file="$STATE_DIR/${service}.sha"
