@@ -15,7 +15,7 @@ Keep dumps **off** the VPS disk as well (copy elsewhere). Retention default: las
 cd /opt/institute
 ./scripts/backup-db.sh
 # cron example (daily 02:15):
-# 15 2 * * * cd /opt/institute && ./scripts/backup-db.sh >> /var/log/institute-backup.log 2>&1
+# 15 2 * * * cd /opt/institute && ./scripts/backup-db.sh >> /opt/institute/logs/backup.log 2>&1
 ```
 
 ## Restore (destructive)

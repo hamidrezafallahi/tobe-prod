@@ -39,11 +39,10 @@ docker exec "$CONTAINER" rm -f "$REMOTE"
 echo "Wrote ${OUT_DIR}/${DUMP_NAME}"
 
 if [[ "$INCLUDE_UPLOADS" -eq 1 ]]; then
-  VOL="${UPLOADS_VOLUME:-institute_uploads_prod}"
+  UPLOADS_DIR="${UPLOADS_DIR:-$ROOT/data/uploads}"
   TAR_NAME="uploads-${STAMP}.tar.gz"
-  echo "== uploads volume ${VOL} =="
-  docker run --rm -v "${VOL}:/data:ro" -v "${OUT_DIR}:/backup" alpine:3.20 \
-    tar czf "/backup/${TAR_NAME}" -C /data .
+  echo "== uploads ${UPLOADS_DIR} =="
+  tar czf "${OUT_DIR}/${TAR_NAME}" -C "$UPLOADS_DIR" .
   echo "Wrote ${OUT_DIR}/${TAR_NAME}"
 fi
 

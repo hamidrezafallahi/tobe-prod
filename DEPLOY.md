@@ -5,10 +5,14 @@
 | Path | Role |
 |------|------|
 | `/opt/institute` | This repo (compose, nginx, scripts, `.env`) |
+| `/opt/institute/data` | Postgres, uploads, Let's Encrypt, certbot webroot |
+| `/opt/institute/logs` | `deploy.log` + nginx logs |
 | Docker Hub | `institute-frontend:<sha>` / `institute-backend:<sha>` from **tobe-dev** CI |
 | GitHub secrets (on **tobe-dev**) | `DOCKER_USERNAME`, `DOCKERHUB_TOKEN`, `VPS_HOST`, `VPS_USER`, `VPS_PORT`, `SSH_PRIVATE_KEY` |
 
 CI SSHs to the VPS and runs `./deploy.sh … <sha>` — it does **not** clone app source onto the VPS.
+
+Compose project name is `institute` (container names `institute-*-prod`). Ops home is `/opt/institute`.
 
 ## First boot checklist
 
@@ -34,7 +38,28 @@ cd /opt/institute
 ./deploy.sh all <new-sha>
 ```
 
+GitHub Actions on **tobe-dev** (push to `master`):
+
+1. Detect whether `FrontEnd/**` and/or `BackEnd/**` changed.
+2. Build and push only those images, tagged with the git SHA.
+3. SSH in and run `./deploy.sh {frontend|backend|all} <sha>`.
+4. Recreate the changed service(s) and refresh nginx.
+
 Rollback uses previous SHA stored under `.deploy-state/`.
+
+## Relocate from `/opt/tobe` or `/opt/shop`
+
+If the stack already runs from an older path with Docker named volumes:
+
+```bash
+./scripts/relocate-to-institute.sh
+```
+
+That stops the stack, moves the repo to `/opt/institute`, copies volumes into `/opt/institute/data` and `/opt/institute/logs`, then starts again on bind mounts. Old named volumes are left in place until you confirm health, then:
+
+```bash
+docker volume rm institute_institute-postgres-data-prod institute_uploads_prod institute_letsencrypt institute_certbot-webroot institute_nginx-logs
+```
 
 ## Demo tonight (honest)
 
@@ -46,7 +71,7 @@ Rollback uses previous SHA stored under `.deploy-state/`.
 
 | Symptom | Check |
 |---------|--------|
-| nginx won't start | `docker logs institute-tls-bootstrap`; certs under volume `letsencrypt` |
+| nginx won't start | `docker logs institute-tls-bootstrap`; certs under `/opt/institute/data/letsencrypt` |
 | 502 on /api | `docker logs institute-backend-prod`; `curl 127.0.0.1:8080/health` |
 | No AV across NAT | TURN IP/ports; `WebRtc__Turn__*` must match coturn user |
 | Image pull denied | `docker login` + correct `DOCKER_USERNAME` |

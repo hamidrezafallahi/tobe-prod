@@ -14,15 +14,33 @@
 
 set -euo pipefail
 
-LOG_FILE="/var/log/institute-deploy.log"
-STATE_DIR="/opt/institute/.deploy-state"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+if [[ "$ROOT" != "/opt/institute" ]]; then
+  echo "ERROR: this repo must live at /opt/institute (found $ROOT)."
+  exit 1
+fi
+
+LOG_FILE="$ROOT/logs/deploy.log"
+STATE_DIR="$ROOT/.deploy-state"
 COMPOSE="docker compose -p institute -f docker-compose.prod.yml"
+
+ensure_dirs() {
+  mkdir -p \
+    "$ROOT/data/postgres" \
+    "$ROOT/data/uploads" \
+    "$ROOT/data/letsencrypt" \
+    "$ROOT/data/certbot" \
+    "$ROOT/logs/nginx" \
+    "$ROOT/backups" \
+    "$STATE_DIR"
+}
+
+ensure_dirs
 
 # هم در GitHub Actions نمایش داده می‌شود و هم در فایل لاگ ذخیره می‌شود.
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-mkdir -p "$STATE_DIR"
-cd /opt/institute
+cd "$ROOT"
 
 echo "=================================================="
 echo "Deploy started at: $(date)"
@@ -38,6 +56,11 @@ fi
 sed -i 's/\r$//' deploy.sh 2>/dev/null || true
 find scripts -name '*.sh' -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
 chmod +x deploy.sh scripts/*.sh 2>/dev/null || true
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git pull --ff-only origin master 2>/dev/null \
+    || echo "WARN: could not fast-forward /opt/institute (local changes or remote unreachable)."
+fi
 
 read_sha() {
   local service="$1"
@@ -144,9 +167,7 @@ ARG2="${2:-}"
 case "$ACTION" in
   frontend|backend)
     deploy_service "$ACTION" "$ARG2"
-    if [[ "$ACTION" == "backend" ]]; then
-      recreate_nginx
-    fi
+    recreate_nginx
     ;;
 
   all)
@@ -164,9 +185,7 @@ case "$ACTION" in
     case "$TARGET" in
       frontend|backend)
         rollback_service "$TARGET"
-        if [[ "$TARGET" == "backend" ]]; then
-          recreate_nginx
-        fi
+        recreate_nginx
         ;;
       all)
         rollback_service frontend

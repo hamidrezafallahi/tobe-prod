@@ -6,7 +6,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+if [[ "$ROOT" != "/opt/institute" ]]; then
+  echo "ERROR: clone this repo to /opt/institute (found $ROOT)"
+  exit 1
+fi
+
 echo "== bootstrap /opt/institute =="
+
+mkdir -p data/postgres data/uploads data/letsencrypt data/certbot logs/nginx backups .deploy-state
 
 if [[ ! -f .env ]]; then
   cp .env.example .env

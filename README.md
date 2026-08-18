@@ -1,6 +1,8 @@
 # tobe-prod — production ops only
 
-Clone on VPS as **`/opt/institute`**. App source + image CI live in **`tobe-dev`** (LanguageInstitute-Compose). This repo never builds app images.
+Clone on VPS as **`/opt/institute`**. App source + image CI live in **tobe-dev**. This repo never builds app images.
+
+All persistent data stays under `/opt/institute` (bind mounts). Nothing is stored in Docker named volumes.
 
 ## Quick start (VPS)
 
@@ -30,10 +32,22 @@ Seed logins (password from `SEED_ADMIN_PASSWORD`, default `ChangeMe!123`):
 
 Images: `{DOCKER_USERNAME}/institute-frontend:<sha>` · `{DOCKER_USERNAME}/institute-backend:<sha>`
 
+## Layout
+
+| Path | Role |
+|------|------|
+| `/opt/institute` | This repo, `.env`, deploy scripts |
+| `/opt/institute/data/postgres` | PostgreSQL data |
+| `/opt/institute/data/uploads` | User uploads |
+| `/opt/institute/data/letsencrypt` | TLS certificates |
+| `/opt/institute/data/certbot` | ACME webroot |
+| `/opt/institute/logs` | Deploy + nginx logs |
+| `/opt/institute/backups` | `pg_dump` output |
+
 ## Firewall
 
 | Port | Proto | Why |
-|------|-------|-----|
+|------|------|------|
 | 80, 443 | TCP | HTTP / HTTPS |
 | 3478 | TCP+UDP | TURN |
 | 49160–49200 | UDP | TURN relay |
