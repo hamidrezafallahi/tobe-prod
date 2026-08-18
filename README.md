@@ -18,8 +18,8 @@ nano .env   # secrets, DOMAIN, TURN IP, Docker Hub user, image SHAs
 ```
 
 Seed logins (password from `SEED_ADMIN_PASSWORD`, default `ChangeMe!123`):  
-`director@institute.local` · `teacher@institute.local` · `student@institute.local` · `staff@institute.local`  
-**Rotate after first login** → `/account/password`.
+`director@institute.local` · `teacher@institute.local` · `student@institute.local` · `staff@institute.local` · `developer@institute.local`  
+**Rotate after first login** → `/account/password`. Production seed with this default password requires `Seed__AllowDefaultPasswordInProduction=true`.
 
 ## Deploy new SHA (CI or manual)
 

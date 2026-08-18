@@ -76,6 +76,7 @@ services:
       Jwt__Issuer: ${Jwt__Issuer:-LanguageInstitute}
       Jwt__Audience: ${Jwt__Audience:-LanguageInstituteUsers}
       Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-ChangeMe!123}
+      Seed__AllowDefaultPasswordInProduction: ${Seed__AllowDefaultPasswordInProduction:-false}
       Swagger__Enabled: ${Swagger__Enabled:-false}
       WebRtc__Turn__Urls: ${WebRtc__Turn__Urls}
       WebRtc__Turn__Username: ${WebRtc__Turn__Username}
