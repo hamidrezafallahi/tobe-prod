@@ -30,6 +30,26 @@ Seed logins (password from `SEED_ADMIN_PASSWORD`, default `ChangeMe!123`):
 ./deploy.sh rollback all
 ```
 
+## Administration tools
+
+Start pgAdmin and Portainer after the production stack is running:
+
+```bash
+docker compose -p institute -f docker-compose.tools.yml up -d
+```
+
+Set `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` in `.env` first. The
+interfaces bind to the server localhost by default. From your workstation, use
+an SSH tunnel:
+
+```bash
+ssh -N -L 5050:127.0.0.1:5050 -L 9443:127.0.0.1:9443 user@server
+```
+
+Open `http://localhost:5050` for pgAdmin and `https://localhost:9443` for
+Portainer. In pgAdmin, register a server with host `postgres`, port `5432`, and
+the `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` values from `.env`.
+
 Images: `{DOCKER_USERNAME}/institute-frontend:<sha>` · `{DOCKER_USERNAME}/institute-backend:<sha>`
 
 ## Layout

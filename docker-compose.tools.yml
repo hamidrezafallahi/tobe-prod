@@ -1,0 +1,37 @@
+# Production administration tools.
+# Start with: docker compose -p institute -f docker-compose.tools.yml up -d
+# Both web UIs bind to localhost by default; use an SSH tunnel from your workstation.
+
+services:
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: institute-pgadmin-prod
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?Set PGADMIN_DEFAULT_EMAIL in .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Set PGADMIN_DEFAULT_PASSWORD in .env}
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+      PGADMIN_CONFIG_LOGIN_BANNER: "Production database administration"
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    networks:
+      - institute-network-prod
+    restart: unless-stopped
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: institute-portainer-prod
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/portainer:/data
+    ports:
+      - "127.0.0.1:${PORTAINER_PORT:-9443}:9443"
+    networks:
+      - institute-network-prod
+    restart: unless-stopped
+
+networks:
+  institute-network-prod:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-institute}_institute-network-prod
