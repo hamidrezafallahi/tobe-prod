@@ -152,6 +152,8 @@ services:
       DOMAIN_NAME: ${DOMAIN_NAME}
       SERVER_IP: ${SERVER_IP}
       CERTBOT_EMAIL: ${CERTBOT_EMAIL}
+    # Reload every 12h so certs renewed by certbot_renew are picked up.
+    command: ["/bin/sh", "-c", "(while :; do sleep 43200; nginx -s reload; done) & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/conf.d/production.conf:/etc/nginx/templates/default.conf.template:ro
