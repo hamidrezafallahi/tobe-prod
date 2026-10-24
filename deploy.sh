@@ -15,8 +15,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-if [[ "$ROOT" != "/opt/institute" ]]; then
-  echo "ERROR: this repo must live at /opt/institute (found $ROOT)."
+if [[ "$ROOT" != "/opt/tobe-prod" ]]; then
+  echo "ERROR: this repo must live at /opt/tobe-prod (found $ROOT)."
   exit 1
 fi
 
@@ -48,7 +48,7 @@ echo "Args: $*"
 echo "=================================================="
 
 if [[ ! -f .env ]]; then
-  echo "ERROR: /opt/institute/.env missing. cp .env.example .env and fill secrets."
+  echo "ERROR: /opt/tobe-prod/.env missing. cp .env.example .env and fill secrets."
   exit 1
 fi
 
@@ -59,7 +59,7 @@ chmod +x deploy.sh scripts/*.sh 2>/dev/null || true
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git pull --ff-only origin master 2>/dev/null \
-    || echo "WARN: could not fast-forward /opt/institute (local changes or remote unreachable)."
+    || echo "WARN: could not fast-forward /opt/tobe-prod (local changes or remote unreachable)."
 fi
 
 read_sha() {
