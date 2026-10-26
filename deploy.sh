@@ -114,6 +114,20 @@ recreate_nginx() {
   $COMPOSE up -d --force-recreate --no-deps nginx
 }
 
+# Panel backups are written by the backend's non-root "app" user (uid 1654). A folder that Docker or mkdir
+# creates belongs to root, so hand it over once; the throwaway container is the same pinned alpine as tls_bootstrap.
+ensure_backups_dir() {
+  local dir="$ROOT/data/backups"
+  mkdir -p "$dir"
+  if [[ "$(stat -c '%u' "$dir")" != "1654" ]]; then
+    echo "Giving $dir to uid 1654 (backend app user)..."
+    docker run --rm -v "$dir:/backups" \
+      alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a \
+      chown 1654:1654 /backups \
+      || echo "WARN: could not give $dir to uid 1654; panel backups fail until the backend can write there."
+  fi
+}
+
 deploy_service() {
   local service="$1"
   local sha="$2"
@@ -160,6 +174,8 @@ rollback_service() {
   echo "Rolling back $service to $prev"
   deploy_service "$service" "$prev"
 }
+
+ensure_backups_dir
 
 ACTION="${1:-}"
 ARG2="${2:-}"

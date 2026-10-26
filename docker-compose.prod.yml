@@ -98,6 +98,8 @@ services:
       RateLimiting__Enabled: ${RateLimiting__Enabled:-true}
     volumes:
       - ./data/uploads:/app/wwwroot/uploads
+      # Backups made from the panel (Backup__Directory). deploy.sh gives this folder to the image's app user (uid 1654).
+      - ./data/backups:/app/backups
     depends_on:
       postgres:
         condition: service_healthy
