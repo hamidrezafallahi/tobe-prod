@@ -53,10 +53,9 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-# Normalize scripts if cloned from Windows
+# Normalize line endings if cloned from Windows
 sed -i 's/\r$//' deploy.sh 2>/dev/null || true
-find scripts -name '*.sh' -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
-chmod +x deploy.sh scripts/*.sh 2>/dev/null || true
+chmod +x deploy.sh 2>/dev/null || true
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git pull --ff-only origin master 2>/dev/null \
