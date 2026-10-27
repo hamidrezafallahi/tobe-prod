@@ -1,6 +1,6 @@
 # =============================================================================
 # Production — Language Institute (ops only)
-# VPS path: /opt/institute  (all persistent data under ./data and ./logs)
+# VPS path: /opt/tobe-prod  (all persistent data under ./data and ./logs)
 # Images: Docker Hub SHA tags from tobe-dev CI
 # =============================================================================
 

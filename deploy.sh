@@ -23,6 +23,7 @@ fi
 LOG_FILE="$ROOT/logs/deploy.log"
 STATE_DIR="$ROOT/.deploy-state"
 COMPOSE="docker compose -p institute -f docker-compose.prod.yml"
+ALPINE_IMAGE="alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a"
 
 ensure_dirs() {
   mkdir -p \
@@ -114,15 +115,31 @@ recreate_nginx() {
   $COMPOSE up -d --force-recreate --no-deps nginx
 }
 
-# Panel backups are written by the backend's non-root "app" user (uid 1654). A folder that Docker or mkdir
-# creates belongs to root, so hand it over once; the throwaway container is the same pinned alpine as tls_bootstrap.
+# The backend runs as uid/gid 1654 ("app"). The uploads bind mount lives on
+# the host, so Dockerfile ownership alone cannot make it writable. Ensure the
+# host directory is owned by the backend user before deployment.
+ensure_uploads_dir() {
+  local dir="$ROOT/data/uploads"
+  mkdir -p "$dir"
+
+  if [[ "$(stat -c '%u:%g' "$dir")" != "1654:1654" ]]; then
+    echo "Giving $dir to uid/gid 1654 (backend app user)..."
+    docker run --rm -v "$dir:/uploads" "$ALPINE_IMAGE" \
+      chown -R 1654:1654 /uploads \
+      || {
+        echo "ERROR: could not give $dir to uid/gid 1654; backend uploads may fail."
+        return 1
+      }
+  fi
+}
+
+# Panel backups are written by the backend's non-root "app" user (uid 1654).
 ensure_backups_dir() {
   local dir="$ROOT/data/backups"
   mkdir -p "$dir"
   if [[ "$(stat -c '%u' "$dir")" != "1654" ]]; then
     echo "Giving $dir to uid 1654 (backend app user)..."
-    docker run --rm -v "$dir:/backups" \
-      alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a \
+    docker run --rm -v "$dir:/backups" "$ALPINE_IMAGE" \
       chown 1654:1654 /backups \
       || echo "WARN: could not give $dir to uid 1654; panel backups fail until the backend can write there."
   fi
@@ -175,6 +192,8 @@ rollback_service() {
   deploy_service "$service" "$prev"
 }
 
+# Ensure writable host bind mounts before any deployment action.
+ensure_uploads_dir
 ensure_backups_dir
 
 ACTION="${1:-}"
