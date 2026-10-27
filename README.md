@@ -59,6 +59,7 @@ Images: `{DOCKER_USERNAME}/institute-frontend:<sha>` · `{DOCKER_USERNAME}/insti
 | `/opt/institute` | This repo, `.env`, deploy scripts |
 | `/opt/institute/data/postgres` | PostgreSQL data |
 | `/opt/institute/data/uploads` | User uploads |
+| `/opt/institute/data/backups` | Backups made from the panel |
 | `/opt/institute/data/letsencrypt` | TLS certificates |
 | `/opt/institute/data/certbot` | ACME webroot |
 | `/opt/institute/logs` | Deploy + nginx logs |
