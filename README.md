@@ -59,6 +59,20 @@ an SSH tunnel:
 ssh -N -L 5050:127.0.0.1:5050 -L 9443:127.0.0.1:9443 user@server
 ```
 
+## Swagger (API testing and data entry)
+
+Swagger is on in production (`Swagger__Enabled`, default `true`), but nginx only
+serves `/swagger` to the server itself. From your workstation, tunnel straight to
+the backend:
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 user@server
+```
+
+Then open <http://localhost:8080/swagger>, log in through `/api/Identity/...` and
+paste the token into **Authorize**. Set `Swagger__Enabled=false` in `.env` and
+`./deploy.sh backend <sha>` to turn it off.
+
 Open `http://localhost:5050` for pgAdmin and `https://localhost:9443` for
 Portainer. In pgAdmin, register a server with host `postgres`, port `5432`, and
 the `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` values from `.env`.
