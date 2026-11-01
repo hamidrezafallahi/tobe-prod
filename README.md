@@ -45,9 +45,12 @@ Seed logins (password from `SEED_ADMIN_PASSWORD`, default `ChangeMe!123`):
 
 ## Administration tools
 
-Start pgAdmin and Portainer after the production stack is running:
+Start pgAdmin and Portainer after the production stack is running. pgAdmin runs
+as uid 5050 and cannot start if `data/pgadmin` belongs to root, so give it the
+folder first:
 
 ```bash
+mkdir -p data/pgadmin && chown -R 5050:5050 data/pgadmin
 docker compose -p institute -f docker-compose.tools.yml up -d
 ```
 
