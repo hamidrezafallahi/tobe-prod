@@ -36,3 +36,10 @@ curl -s -H "Authorization: Bearer <token>" https://$DOMAIN_NAME/api/LiveSessions
 | 6 | Optional: chrome://webrtc-internals shows relay when P2P fails | ☐ |
 
 Out of scope here: `turns:` TLS, SFU.
+
+## LiveKit SFU and coturn
+
+With `MEDIA_PROVIDER=livekit` classes use LiveKit's embedded TURN (TURN/TLS 5349, TURN/UDP 3479, short-lived
+credentials per join) instead of coturn. coturn stays running and unchanged for the legacy mesh, which is the
+rollback path; nothing else in the stack uses it. Retire it only after the steps in
+`docs/operations/livekit-rollback.md` → "Retiring coturn".

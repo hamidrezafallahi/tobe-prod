@@ -1,0 +1,111 @@
+# =============================================================================
+# LiveKit SFU for the live classroom — OPT-IN overlay on docker-compose.prod.yml
+#
+# Loaded by deploy.sh only when .env has LIVEKIT_ENABLED=true; with it off, nothing below exists for
+# compose and production runs exactly as before. Classes move onto LiveKit only when MEDIA_PROVIDER=livekit
+# as well (backend setting). Docs: docs/operations/livekit-deployment.md
+#
+# Networking: bridge network + explicit ports (see livekit-network-requirements.md). Signaling 7880 is
+# NOT published: nginx reaches it as livekit:7880 and serves it as wss://${LIVEKIT_DOMAIN}.
+# =============================================================================
+
+services:
+  livekit:
+    # Pinned version and multi-arch digest (Docker Hub, 2026-10-14). Same version as tobe-dev. Never :latest.
+    image: livekit/livekit-server:v1.13.10@sha256:89ca9ce0791e18d6e03bf6e2c49ceb27e1c754eae8bd50c989386c1a5963791a
+    container_name: institute-livekit-prod
+    restart: unless-stopped
+    # Advertised media address = the public IPv4 clients send UDP/TCP media to.
+    command: ["--config", "/etc/livekit.yaml", "--node-ip", "${LIVEKIT_NODE_IP:?Set LIVEKIT_NODE_IP to the public IPv4 of the media host}"]
+    environment:
+      # API key/secret live only in .env (never in git, never in an image or build arg).
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:?Set LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET (32+ random characters)}"
+      # Embedded TURN/TLS uses the Let's Encrypt certificate of the LiveKit host name.
+      LIVEKIT_TURN_DOMAIN: ${LIVEKIT_DOMAIN:?Set LIVEKIT_DOMAIN, e.g. livekit.example.com}
+      LIVEKIT_TURN_CERT_FILE: /etc/letsencrypt/live/${LIVEKIT_DOMAIN}/fullchain.pem
+      LIVEKIT_TURN_KEY_FILE: /etc/letsencrypt/live/${LIVEKIT_DOMAIN}/privkey.pem
+    volumes:
+      - ./docker/livekit/livekit.prod.yaml:/etc/livekit.yaml:ro
+      - ./data/letsencrypt:/etc/letsencrypt:ro
+    ports:
+      # Must match docker/livekit/livekit.prod.yaml and the firewall (livekit-network-requirements.md).
+      - "7881:7881/tcp"         # ICE over TCP (UDP blocked)
+      - "7882-7891:7882-7891/udp" # WebRTC media, UDP mux
+      - "5349:5349/tcp"         # TURN/TLS
+      - "3479:3479/udp"         # TURN/UDP (3478 stays with coturn while the legacy mesh exists)
+    depends_on:
+      livekit_tls_bootstrap:
+        condition: service_completed_successfully
+    networks:
+      - institute-network-prod
+    healthcheck:
+      # GET / answers "OK" once the server is up (alpine image: busybox wget).
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:7880/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Memory cap as a safety net; no CPU cap (throttling an SFU delays packets). Revisit after the load test.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # Keeps nginx and LiveKit able to start before Let's Encrypt has issued the LiveKit certificate:
+  # a 7-day self-signed placeholder, same pattern as tls_bootstrap. Browsers reject it, so the real
+  # certificate must exist before MEDIA_PROVIDER=livekit (deployment doc, step 3).
+  livekit_tls_bootstrap:
+    image: alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+    container_name: institute-livekit-tls-bootstrap
+    volumes:
+      - ./data/letsencrypt:/etc/letsencrypt
+    environment:
+      LIVEKIT_DOMAIN: ${LIVEKIT_DOMAIN:?Set LIVEKIT_DOMAIN}
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -e
+        LIVE="/etc/letsencrypt/live/$${LIVEKIT_DOMAIN}"
+        if [ -f "$$LIVE/fullchain.pem" ] && [ -f "$$LIVE/privkey.pem" ]; then
+          echo "TLS material already present for $${LIVEKIT_DOMAIN}"
+          exit 0
+        fi
+        echo "Creating self-signed placeholder for $${LIVEKIT_DOMAIN} (replace with Let's Encrypt, see livekit-deployment.md)"
+        apk add --no-cache openssl >/dev/null
+        mkdir -p "$$LIVE"
+        openssl req -x509 -nodes -newkey rsa:2048 -days 7 \
+          -keyout "$$LIVE/privkey.pem" \
+          -out "$$LIVE/fullchain.pem" \
+          -subj "/CN=$${LIVEKIT_DOMAIN}"
+        chmod 600 "$$LIVE/privkey.pem"
+        echo "Self-signed ready"
+    networks:
+      - institute-network-prod
+    restart: "no"
+
+  nginx:
+    environment:
+      LIVEKIT_DOMAIN: ${LIVEKIT_DOMAIN}
+    volumes:
+      # Extra envsubst template: the wss:// signaling host. Not mounted at all unless LiveKit is enabled.
+      - ./docker/nginx/conf.d/livekit.conf:/etc/nginx/templates/livekit.conf.template:ro
+    depends_on:
+      livekit_tls_bootstrap:
+        condition: service_completed_successfully
+
+  backend:
+    # No depends_on livekit: the legacy mesh must keep working if the SFU is down.
+    environment:
+      # legacy (default) | livekit — switch only while no class is live (livekit-rollback.md).
+      Media__Provider: ${MEDIA_PROVIDER:-legacy}
+      LiveKit__Url: wss://${LIVEKIT_DOMAIN}
+      LiveKit__ApiUrl: http://livekit:7880
+      LiveKit__ApiKey: ${LIVEKIT_API_KEY}
+      LiveKit__ApiSecret: ${LIVEKIT_API_SECRET}
+      LiveKit__TokenTtlMinutes: ${LIVEKIT_TOKEN_TTL_MINUTES:-10}

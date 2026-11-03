@@ -1,0 +1,39 @@
+# LiveKit SFU — production config (mounted read-only by docker-compose.livekit.yml).
+# Key names checked against livekit/livekit v1.13.10 config-sample.yaml; the server runs in strict
+# mode, so an unknown key stops it at startup instead of being ignored.
+#
+# Deliberately NOT in this file (set by docker-compose.livekit.yml from .env):
+#   keys          → LIVEKIT_KEYS ("<key>: <secret>")
+#   rtc node IP   → --node-ip ${LIVEKIT_NODE_IP}
+#   turn.domain   → LIVEKIT_TURN_DOMAIN
+#   turn.cert_file / turn.key_file → LIVEKIT_TURN_CERT_FILE / LIVEKIT_TURN_KEY_FILE
+# Production never uses --dev.
+
+# Signaling + server API, reached only over the Docker network (nginx, backend). Not published.
+port: 7880
+
+rtc:
+  # ICE over TCP when UDP is blocked (published 7881/tcp).
+  tcp_port: 7881
+  # All WebRTC media through a small UDP mux range instead of 50000-60000: cheap to publish from a
+  # bridge-networked container and easy to firewall. One port per vCPU or more is recommended.
+  udp_port: 7882-7891
+  # The public IP is given explicitly (--node-ip); STUN discovery is not relied on.
+  use_external_ip: false
+
+room:
+  # Rooms are created by the first join (token) and closed by the backend when the session closes.
+  empty_timeout: 300
+  departure_timeout: 20
+
+turn:
+  # Embedded TURN for networks that block direct UDP/TCP to the SFU. Only the TLS listener matters
+  # for hard firewalls; credentials are short-lived and issued by LiveKit with each join.
+  enabled: true
+  tls_port: 5349
+  # 3478 is taken by coturn while the legacy mesh is kept for rollback. Move to 3478 after coturn is removed.
+  udp_port: 3479
+
+logging:
+  level: info
+  pion_level: error

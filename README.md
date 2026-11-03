@@ -41,6 +41,9 @@ Seed logins (password from `SEED_ADMIN_PASSWORD`, default `ChangeMe!123`):
 ./deploy.sh frontend <git-sha>
 ./deploy.sh backend <git-sha>
 ./deploy.sh rollback all
+./deploy.sh livekit        # only with LIVEKIT_ENABLED=true
+./deploy.sh backend-env    # backend re-created with the same image and the current .env
+./deploy.sh livekit-down   # after LIVEKIT_ENABLED=false
 ```
 
 ## Administration tools
@@ -102,11 +105,23 @@ Images: `{DOCKER_USERNAME}/institute-frontend:<sha>` · `{DOCKER_USERNAME}/insti
 | 3478 | TCP+UDP | TURN |
 | 49160–49200 | UDP | TURN relay |
 
+Only with `LIVEKIT_ENABLED=true` (LiveKit SFU, see `docs/operations/livekit-network-requirements.md`):
+
+| Port | Proto | Why |
+|------|------|------|
+| 7881 | TCP | LiveKit ICE over TCP |
+| 7882–7891 | UDP | LiveKit WebRTC media (UDP mux) |
+| 5349 | TCP | LiveKit TURN/TLS |
+| 3479 | UDP | LiveKit TURN/UDP |
+
 ## Docs
 
 | File | Topic |
 |------|--------|
 | [TURN.md](./TURN.md) | Coturn + two-network NAT checklist |
+| [livekit-deployment.md](./docs/operations/livekit-deployment.md) | LiveKit SFU: enable, activate, verify |
+| [livekit-network-requirements.md](./docs/operations/livekit-network-requirements.md) | LiveKit DNS, TLS, ports, host sizing, region |
+| [livekit-rollback.md](./docs/operations/livekit-rollback.md) | Back to the mesh/coturn, step by step |
 
 ## Health
 

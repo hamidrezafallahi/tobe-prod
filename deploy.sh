@@ -10,6 +10,9 @@
 #   ./deploy.sh rollback frontend
 #   ./deploy.sh rollback backend
 #   ./deploy.sh rollback all
+#   ./deploy.sh livekit        (LIVEKIT_ENABLED=true: start/update the LiveKit SFU)
+#   ./deploy.sh backend-env    (re-create backend with its current image and .env)
+#   ./deploy.sh livekit-down   (after LIVEKIT_ENABLED=false: remove the SFU container)
 # =============================================================================
 
 set -euo pipefail
@@ -62,6 +65,35 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     || echo "WARN: could not fast-forward /opt/tobe-prod (local changes or remote unreachable)."
 fi
 
+# LiveKit SFU (docs/operations/livekit-deployment.md) is opt-in: only LIVEKIT_ENABLED=true in .env adds its
+# compose overlay. Without it every command here runs exactly as before.
+LIVEKIT_COMPOSE="$COMPOSE -f docker-compose.livekit.yml"
+livekit_enabled() {
+  grep -qE '^LIVEKIT_ENABLED=true[[:space:]]*$' .env
+}
+if livekit_enabled; then
+  COMPOSE="$LIVEKIT_COMPOSE"
+  echo "LiveKit overlay: on (LIVEKIT_ENABLED=true)"
+fi
+
+require_livekit_enabled() {
+  if ! livekit_enabled; then
+    echo "ERROR: set LIVEKIT_ENABLED=true (and the LIVEKIT_* values) in .env first. See docs/operations/livekit-deployment.md"
+    exit 1
+  fi
+}
+
+# nginx loads the LiveKit host only with a certificate file in place: make the placeholder first if needed.
+ensure_livekit_tls() {
+  $COMPOSE up -d --no-deps livekit_tls_bootstrap
+  local code
+  code="$(docker wait institute-livekit-tls-bootstrap)"
+  if [[ "$code" != "0" ]]; then
+    echo "ERROR: LiveKit TLS bootstrap failed (exit $code)"
+    exit 1
+  fi
+}
+
 read_sha() {
   local service="$1"
   local file="$STATE_DIR/${service}.sha"
@@ -110,6 +142,9 @@ wait_healthy() {
 }
 
 recreate_nginx() {
+  if livekit_enabled; then
+    ensure_livekit_tls
+  fi
   echo "Recreating nginx..."
   $COMPOSE up -d --force-recreate --no-deps nginx
 }
@@ -214,6 +249,33 @@ case "$ACTION" in
     recreate_nginx
     ;;
 
+  livekit)
+    require_livekit_enabled
+    ensure_livekit_tls
+    $COMPOSE pull livekit
+    $COMPOSE up -d --no-deps livekit
+    wait_healthy livekit
+    recreate_nginx
+    ;;
+
+  backend-env)
+    # Provider switch / rollback: new env, same image. The image SHA history is not touched.
+    echo "Re-creating backend with its current image and the current .env"
+    $COMPOSE up -d --force-recreate --no-deps backend
+    wait_healthy backend
+    ;;
+
+  livekit-down)
+    # The overlay is no longer loaded once LIVEKIT_ENABLED=false, so the containers are named directly.
+    if livekit_enabled; then
+      echo "ERROR: set LIVEKIT_ENABLED=false in .env first (and MEDIA_PROVIDER=legacy, then ./deploy.sh backend-env)."
+      exit 1
+    fi
+    docker stop institute-livekit-prod 2>/dev/null || true
+    docker rm institute-livekit-prod institute-livekit-tls-bootstrap 2>/dev/null || true
+    recreate_nginx
+    ;;
+
   rollback)
     TARGET="${ARG2:-}"
     case "$TARGET" in
@@ -238,6 +300,7 @@ case "$ACTION" in
     echo "  ./deploy.sh {frontend|backend|all} <sha>"
     echo "  ./deploy.sh nginx"
     echo "  ./deploy.sh rollback {frontend|backend|all}"
+    echo "  ./deploy.sh {livekit|backend-env|livekit-down}"
     echo "Current frontend SHA: $(read_sha frontend || true)"
     echo "Current backend SHA:  $(read_sha backend || true)"
     exit 1
