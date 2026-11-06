@@ -96,6 +96,11 @@ services:
       Certificates__MinAttendancePercent: ${Certificates__MinAttendancePercent:-80}
       Certificates__MinFinalPercent: ${Certificates__MinFinalPercent:-70}
       RateLimiting__Enabled: ${RateLimiting__Enabled:-true}
+      WebPush__Enabled: ${WebPush__Enabled:-false}
+      WebPush__Subject: ${WebPush__Subject:-}
+      WebPush__PublicKey: ${WebPush__PublicKey:-}
+      WebPush__PrivateKey: ${WebPush__PrivateKey:-}
+      WebPush__ClassReminderMinutes: ${WebPush__ClassReminderMinutes:-15}
     volumes:
       - ./data/uploads:/app/wwwroot/uploads
       # Backups made from the panel (Backup__Directory). deploy.sh gives this folder to the image's app user (uid 1654).
