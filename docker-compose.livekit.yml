@@ -99,6 +99,39 @@ services:
       livekit_tls_bootstrap:
         condition: service_completed_successfully
 
+  # Media bot: plays the teacher's class file into the LiveKit room (MEDIA_SHARED_PLAYBACK=server).
+  # Only started with the "media-bot" profile, which deploy.sh adds when .env has MEDIA_SHARED_PLAYBACK=server.
+  # Not published: only the backend talks to it, on this network, with requests signed by LIVEKIT_API_SECRET.
+  # Image built by tobe-dev CI from MediaBot/ (institute-media-bot:<git sha>); deploy: ./deploy.sh media-bot <sha>
+  media-bot:
+    image: ${DOCKER_USERNAME}/institute-media-bot:${MEDIA_BOT_IMAGE_TAG:-unset}
+    container_name: institute-media-bot-prod
+    profiles: ["media-bot"]
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set LIVEKIT_API_SECRET}
+      MEDIA_ROOT: /media
+    volumes:
+      # Same files the backend serves from wwwroot/uploads; stored paths are "/uploads/…".
+      - ./data/uploads:/media/uploads:ro
+    depends_on:
+      livekit:
+        condition: service_healthy
+    networks:
+      - institute-network-prod
+    # ffmpeg decodes and the WebRTC encoder re-encodes each playing file: roughly one CPU core per class
+    # playing a video at the same time (much less for audio). Revisit after a load test on the real host.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
   backend:
     # No depends_on livekit: the legacy mesh must keep working if the SFU is down.
     environment:
@@ -109,3 +142,7 @@ services:
       LiveKit__ApiKey: ${LIVEKIT_API_KEY}
       LiveKit__ApiSecret: ${LIVEKIT_API_SECRET}
       LiveKit__TokenTtlMinutes: ${LIVEKIT_TOKEN_TTL_MINUTES:-10}
+      # client (default): every browser loads the class file | server: the media bot plays it into the room.
+      # server is honoured only with MEDIA_PROVIDER=livekit; otherwise the backend logs it and stays on client.
+      Media__SharedPlayback: ${MEDIA_SHARED_PLAYBACK:-client}
+      MediaBot__Url: http://media-bot:8090

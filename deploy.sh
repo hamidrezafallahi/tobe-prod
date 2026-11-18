@@ -13,6 +13,8 @@
 #   ./deploy.sh livekit        (LIVEKIT_ENABLED=true: start/update the LiveKit SFU)
 #   ./deploy.sh backend-env    (re-create backend with its current image and .env)
 #   ./deploy.sh livekit-down   (after LIVEKIT_ENABLED=false: remove the SFU container)
+#   ./deploy.sh media-bot <sha>  (MEDIA_SHARED_PLAYBACK=server: start/update the media bot)
+#   ./deploy.sh media-bot-down   (after MEDIA_SHARED_PLAYBACK=client: remove the media bot)
 # =============================================================================
 
 set -euo pipefail
@@ -74,6 +76,15 @@ livekit_enabled() {
 if livekit_enabled; then
   COMPOSE="$LIVEKIT_COMPOSE"
   echo "LiveKit overlay: on (LIVEKIT_ENABLED=true)"
+fi
+
+# Server playback of class files: MEDIA_SHARED_PLAYBACK=server adds the media bot (a profile of the LiveKit overlay).
+media_bot_enabled() {
+  livekit_enabled && grep -qE '^MEDIA_SHARED_PLAYBACK=server[[:space:]]*$' .env
+}
+if media_bot_enabled; then
+  COMPOSE="$COMPOSE --profile media-bot"
+  echo "Media bot: on (MEDIA_SHARED_PLAYBACK=server)"
 fi
 
 require_livekit_enabled() {
@@ -194,6 +205,8 @@ deploy_service() {
     var_name="FRONTEND_IMAGE_TAG"
   elif [[ "$service" == "backend" ]]; then
     var_name="BACKEND_IMAGE_TAG"
+  elif [[ "$service" == "media-bot" ]]; then
+    var_name="MEDIA_BOT_IMAGE_TAG"
   else
     echo "ERROR: Unknown service '$service'"
     exit 1
@@ -256,6 +269,23 @@ case "$ACTION" in
     $COMPOSE up -d --no-deps livekit
     wait_healthy livekit
     recreate_nginx
+    ;;
+
+  media-bot)
+    if ! media_bot_enabled; then
+      echo "ERROR: set LIVEKIT_ENABLED=true and MEDIA_SHARED_PLAYBACK=server in .env first."
+      exit 1
+    fi
+    deploy_service media-bot "$ARG2"
+    ;;
+
+  media-bot-down)
+    if media_bot_enabled; then
+      echo "ERROR: set MEDIA_SHARED_PLAYBACK=client in .env first, then ./deploy.sh backend-env."
+      exit 1
+    fi
+    docker stop institute-media-bot-prod 2>/dev/null || true
+    docker rm institute-media-bot-prod 2>/dev/null || true
     ;;
 
   backend-env)
